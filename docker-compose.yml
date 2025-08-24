@@ -1,0 +1,113 @@
+services:
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.0
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    # pas de ports: (réseau interne)
+
+  kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    depends_on: [zookeeper]
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: INTERNAL:PLAINTEXT,EXTERNAL:PLAINTEXT
+      KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka:29092,EXTERNAL://localhost:9092
+      KAFKA_LISTENERS: INTERNAL://0.0.0.0:29092,EXTERNAL://0.0.0.0:9092
+      KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+
+  postgres:
+    image: postgres:15
+    environment:
+      POSTGRES_USER: trends
+      POSTGRES_PASSWORD: trends
+      POSTGRES_DB: trends
+    volumes:
+      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+      - ./db/init.sql:/docker-entrypoint-initdb.d/00_init.sql:ro
+      - ./db/migrate_02_news.sql:/docker-entrypoint-initdb.d/02_news.sql:ro
+
+    # pas de ports nécessaires pour l’UI dans le même réseau
+
+  wiki-producer:
+    build:                     # <-- build est SOUS le service
+      context: ./producers/wiki
+    depends_on: [kafka]
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      TOPIC: wiki_rc
+      LANG: fr
+      POLL_SEC: "5"
+    restart: unless-stopped
+
+  hn-producer:
+    build:
+      context: ./producers/hn
+    depends_on: [kafka]
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      TOPIC: hn_posts
+      POLL_SEC: "20"
+      TOP_N: "50"
+    restart: unless-stopped
+
+  db-writer:
+    build:
+      context: ./consumers/db_writer
+    depends_on: [kafka, postgres]
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      TOPIC_WIKI: wiki_rc
+      TOPIC_HN: hn_posts
+      TOPIC_NEWS: news_fr
+      DB_HOST: postgres
+      DB_NAME: trends
+      DB_USER: trends
+      DB_PASS: trends
+      DB_PORT: "5432"
+    restart: unless-stopped
+  news-producer:
+    build:
+      context: ./producers/news
+    depends_on: [kafka]
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      TOPIC: news_fr
+      POLL_SEC: "30"
+      FEEDS: "https://www.lemonde.fr/rss/en_continu.xml,https://www.bfmtv.com/rss/flux-actualites-a-la-une/,https://www.france24.com/fr/rss,https://www.lefigaro.fr/rss/feeds/figaro_actualites.xml,https://www.leparisien.fr/actualites-a-la-une/rss.xml,https://www.lesechos.fr/rss/rss_une.xml"
+    restart: unless-stopped
+  
+  spike-aggregator:
+    build:
+      context: ./consumers/spike_aggregator
+    depends_on: [postgres]
+    environment:
+      DB_HOST: postgres
+      DB_NAME: trends
+      DB_USER: trends
+      DB_PASS: trends
+      DB_PORT: "5432"
+      STEP_SEC: "30"
+      WIKI_WINDOW_MIN: "10"
+      ENTITIES_WINDOW_MIN: "60"
+      HN_WINDOW_MIN: "10"
+      NEWS_WINDOW_MIN: "30"    # <-- ajou
+    restart: unless-stopped
+
+  ui:
+    build:
+      context: ./app
+    depends_on: [postgres]
+    environment:
+      DB_HOST: postgres
+      DB_NAME: trends
+      DB_USER: trends
+      DB_PASS: trends
+      DB_PORT: "5432"
+      REFRESH_SEC: "10"
+    ports: ["8501:8501"]   # UI accessible http://localhost:8501
+    restart: unless-stopped
