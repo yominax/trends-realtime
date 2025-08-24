@@ -1,4 +1,4 @@
-# Wikipedia + HackerNews — Trends Live (Kafka + Postgres + Streamlit)
+# Wikipedia  Trends Live (Kafka + Postgres + Streamlit)
 ## Démarrage
 ```bash
 cd tends-realtime
