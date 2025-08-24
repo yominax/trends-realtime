@@ -9,16 +9,18 @@ BOOT  = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "kafka:29092")
 TOPIC = os.getenv("TOPIC", "news_fr")
 POLL  = int(os.getenv("POLL_SEC", "30"))
 # Feeds FR par défaut (tu peux en ajouter/enlever)
-FEEDS = [u.strip() for u in os.getenv("FEEDS",
-    ",".join([
-      "https://www.lemonde.fr/rss/en_continu.xml",
-      "https://www.bfmtv.com/rss/flux-actualites-a-la-une/",
-      "https://www.france24.com/fr/rss",
-      "https://www.lefigaro.fr/rss/feeds/figaro_actualites.xml",
-      "https://www.leparisien.fr/actualites-a-la-une/rss.xml",
-      "https://www.lesechos.fr/rss/rss_une.xml"
-    ])
-).split(",") if u.strip()]
+# remplacer la valeur par défaut de FEEDS
+FEEDS = [
+    "https://www.bfmtv.com/rss/flux-actualites-a-la-une/",
+    "https://www.lemonde.fr/rss/une.xml",
+    "https://www.radiofrance.fr/rss/monde",
+    "https://www.radiofrance.fr/rss/politique",
+    "https://www.radiofrance.fr/franceinter/rss",
+    "https://www.france24.com/fr/rss",
+    "https://www.lefigaro.fr/rss/feeds/figaro_actualites.xml",
+    "https://www.lesechos.fr/rss/rss_une.xml",
+]
+
 
 def log(msg): print(datetime.now(timezone.utc).isoformat(), "[news]", msg, flush=True)
 

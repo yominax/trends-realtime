@@ -49,11 +49,12 @@ with col1:
     st.subheader("Éditions par minute — 60 dernières minutes (toutes pages)")
     # bucket 1 min des éditions
     edits_serie = q("""
-      SELECT date_trunc('minute', ts AT TIME ZONE 'Europe/Paris') AS minute, COUNT(*) AS edits
-      FROM wiki_rc
-      WHERE ts >= NOW() - INTERVAL '60 minutes'
-      GROUP BY 1
-      ORDER BY 1
+      SELECT date_trunc('minute', ts) AS minute, COUNT(*) AS edits
+FROM wiki_rc
+WHERE ts >= NOW() - INTERVAL '60 minutes'
+GROUP BY minute
+ORDER BY minute;
+
     """)
     if not edits_serie.empty:
         edits_serie = edits_serie.set_index("minute")
@@ -70,6 +71,21 @@ entities = q("""
 """)
 if entities.empty:
     st.caption("En attente de données…")
+st.subheader("Tendances actuelles — 60 min (mots / phrases)")
+entities = q("""
+  SELECT ts, phrase, kind, mentions, sources, score
+  FROM spikes_entities
+  ORDER BY ts DESC, score DESC
+  LIMIT 40
+""")
+if not entities.empty:
+    top = entities.sort_values(["ts","score"], ascending=[False,False]).head(15)
+    st.bar_chart(top.set_index("phrase")["score"])
+    st.dataframe(
+        top[["phrase","kind","mentions","sources","score"]]
+        .rename(columns={"kind":"source(s)", "mentions":"occurrences", "sources":"nb_sources"})
+    )
+
 else:
     # TOP 15, score décroissant
     e = entities.sort_values(["ts","score"], ascending=[False,False]).head(15)
