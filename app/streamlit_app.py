@@ -6,11 +6,32 @@ from wordcloud import WordCloud, STOPWORDS
 from PIL import Image
 
 # ---------- Config ----------
-DBH=os.getenv("DB_HOST","postgres"); DBN=os.getenv("DB_NAME","trends"); DBU=os.getenv("DB_USER","trends"); DBP=os.getenv("DB_PASS","trends"); DBPORT=int(os.getenv("DB_PORT","5432"))
-REFRESH=int(os.getenv("REFRESH_SEC","10"))
+DBH = os.getenv("DB_HOST", "postgres")
+DBN = os.getenv("DB_NAME", "trends")
+DBU = os.getenv("DB_USER", "trends")
+DBP = os.getenv("DB_PASS", "trends")
+DBPORT = int(os.getenv("DB_PORT", "5432"))
+REFRESH = int(os.getenv("REFRESH_SEC", "60"))
 
 st.set_page_config(page_title="Trends Live — Médias FR", layout="wide")
-st.title("🔥 Trends Live — Médias FR")
+
+st.markdown(
+    """
+    <style>
+    .stApp {
+        background-color: #000;
+        background-image: radial-gradient(#fff 1px, transparent 1px), radial-gradient(#fff 1px, transparent 1px);
+        background-position: 0 0, 25px 25px;
+        background-size: 50px 50px;
+        color: #e0e0e0;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
+st.image("https://upload.wikimedia.org/wikipedia/commons/9/91/Octicons-rss-16.svg", width=60)
+st.title("Trends Live — Médias FR")
 
 # ---------- Connexion DB (avec retry) ----------
 @st.cache_resource
@@ -44,8 +65,6 @@ FR_STOP = STOPWORDS.union({
     "janvier","février","mars","avril","mai","juin","juillet","août","septembre","octobre","novembre","décembre"
 })
 TOKEN = re.compile(r"[A-Za-zÀ-ÖØ-öø-ÿ'-]+")
-import collections, re
-
 CAP_SEQ = re.compile(r"\b(?:[A-Z][\wÀ-ÖØ-öø-ÿ'-]{2,}(?:\s+[A-Z][\wÀ-ÖØ-öø-ÿ'-]{2,})+)\b")
 
 
@@ -68,8 +87,6 @@ def toks(s: str):
             continue
         out.append(norm)
     return out
-import collections, re
-CAP_SEQ = re.compile(r"\b(?:[A-Z][\wÀ-ÖØ-öø-ÿ'-]{2,}(?:\s+[A-Z][\wÀ-ÖØ-öø-ÿ'-]{2,})+)\b")
 
 def compute_trends_df(titles:list[str]):
     if not titles:
@@ -123,7 +140,7 @@ def wiki_last(n:int=20):
 
 # ===================== UI =====================
 
-tab_flux, tab_now, tab_1h, tab_24h = st.tabs(["📡 Flux direct", "⚡ Analyse directe (10 min)", "🕐 1 h", "📅 24 h"])
+tab_flux, tab_now, tab_1h, tab_24h = st.tabs(["Flux direct", "Analyse directe (10 min)", "1 h", "24 h"])
 
 # --------- Flux direct ---------
 with tab_flux:
