@@ -68,6 +68,7 @@ def write_news(cur, rec: dict):
         VALUES (to_timestamp(%s), %s, %s, %s, %s, %s)
 
 
+
         """,
         (
             rec.get("published_ts"),
@@ -76,7 +77,9 @@ def write_news(cur, rec: dict):
             rec.get("url"),
             rec.get("summary"),
 
+
             rec.get("kind", "continu"),
+
 
         ),
     )
