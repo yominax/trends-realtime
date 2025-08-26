@@ -11,3 +11,4 @@ docker compose up -d --build
 - db-writer: Kafka → Postgres
 - spike-aggregator: calcule spikes (chaque minute)
 - ui: Streamlit
+- news-producer: flux « Une » et flux continu via RSS francophones (+GDELT/Mediastack en option)

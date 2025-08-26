@@ -96,21 +96,22 @@ def wc_from_titles(titles:list[str]):
     return Image.open(buf)
 
 # ---------- Requêtes utilitaires ----------
-def news_since(minutes:int):
+def news_since(minutes:int, kind:str):
     return q("""
       SELECT published_ts AT TIME ZONE 'Europe/Paris' AS ts_local, source, title, url
       FROM news_articles
-      WHERE published_ts >= NOW() - (%s || ' minutes')::interval
+      WHERE kind=%s AND published_ts >= NOW() - (%s || ' minutes')::interval
       ORDER BY published_ts DESC
-    """,[minutes])
+    """,[kind, minutes])
 
-def last_news(n:int=30):
+def last_news(n:int=30, kind:str="une"):
     return q("""
       SELECT published_ts AT TIME ZONE 'Europe/Paris' AS ts_local, source, title, url
       FROM news_articles
+      WHERE kind=%s
       ORDER BY published_ts DESC
       LIMIT %s
-    """,[n])
+    """,[kind, n])
 
 def wiki_last(n:int=20):
     return q("""
@@ -128,13 +129,24 @@ tab_flux, tab_now, tab_1h, tab_24h = st.tabs(["📡 Flux direct", "⚡ Analyse d
 with tab_flux:
     c1, c2 = st.columns([1.1, 1])
     with c1:
-        st.subheader("Derniers articles (Médias FR)")
-        ln = last_news(40)
-        if ln.empty:
-            st.caption("— En attente d’articles…")
-        else:
-            for _,r in ln.iterrows():
-                st.markdown(f"**[{r['source']}]** [{r['title']}]({r['url']}) — {r['ts_local']}")
+        st.subheader("Derniers articles")
+        col_une, col_cont = st.columns(2)
+        with col_une:
+            st.caption("Flux UNE")
+            ln = last_news(20, "une")
+            if ln.empty:
+                st.caption("— En attente…")
+            else:
+                for _,r in ln.iterrows():
+                    st.markdown(f"**[{r['source']}]** [{r['title']}]({r['url']}) — {r['ts_local']}")
+        with col_cont:
+            st.caption("Flux continu")
+            lc = last_news(20, "continu")
+            if lc.empty:
+                st.caption("— En attente…")
+            else:
+                for _,r in lc.iterrows():
+                    st.markdown(f"**[{r['source']}]** [{r['title']}]({r['url']}) — {r['ts_local']}")
     with c2:
         st.subheader("Derniers événements Wikipedia")
         lw = wiki_last(25)
@@ -146,8 +158,8 @@ with tab_flux:
 
 # --------- Analyse directe (10 min) ---------
 with tab_now:
-    st.subheader("Top en direct (dernières 10 minutes)")
-    now_df = news_since(10)
+    st.subheader("Top flux continu (10 min)")
+    now_df = news_since(10, "continu")
     titles = now_df["title"].astype(str).tolist() if not now_df.empty else []
     trends_now = compute_trends_df(titles)
     if trends_now.empty:
@@ -163,8 +175,8 @@ with tab_now:
 
 # --------- 1 h ---------
 with tab_1h:
-    st.subheader("Tendances — 60 min")
-    df1 = news_since(60)
+    st.subheader("Tendances flux continu — 60 min")
+    df1 = news_since(60, "continu")
     titles1 = df1["title"].astype(str).tolist() if not df1.empty else []
     t1 = compute_trends_df(titles1)
     if t1.empty:
@@ -176,8 +188,8 @@ with tab_1h:
 
 # --------- 24 h ---------
 with tab_24h:
-    st.subheader("Tendances — 24 h")
-    dfD = news_since(1440)
+    st.subheader("Tendances flux UNE — 24 h")
+    dfD = news_since(1440, "une")
     titlesD = dfD["title"].astype(str).tolist() if not dfD.empty else []
     tD = compute_trends_df(titlesD)
     if tD.empty:
