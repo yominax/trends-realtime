@@ -12,8 +12,17 @@ MAX_WORKERS = int(os.getenv("MAX_WORKERS", "12"))
 FEEDS_ENV   = os.getenv("FEEDS", "")
 FEEDS_FILE  = os.getenv("FEEDS_FILE", "/app/feeds.txt")
 USE_GDELT   = os.getenv("USE_GDELT", "1") == "1"
+
+GDELT_MAX   = int(os.getenv("GDELT_MAX", "250"))
+GDELT_QUERY = os.getenv("GDELT_QUERY", "sourceLanguage:French")
+# Optional Mediastack API to boost article volume
+MEDIASTACK_KEY   = os.getenv("MEDIASTACK_KEY", "")
+MEDIASTACK_LIMIT = int(os.getenv("MEDIASTACK_LIMIT", "50"))
+USE_MEDIASTACK   = bool(MEDIASTACK_KEY)
+
 GDELT_MAX   = int(os.getenv("GDELT_MAX", "50"))
 GDELT_QUERY = os.getenv("GDELT_QUERY", "sourceLanguage:French")
+
 
 UA = "TrendsRealtimeBot/1.0 (+github.com/yominax/trends-realtime; contact: you@example.com)"
 HDRS = {
@@ -127,6 +136,46 @@ def pull_gdelt(seen_urls):
     except Exception as ex:
         return out, str(ex)
 
+
+def pull_mediatack(seen_urls):
+    out = []
+    try:
+        params = {
+            "access_key": MEDIASTACK_KEY,
+            "languages": "fr",
+            "limit": MEDIASTACK_LIMIT,
+            "sort": "published_desc",
+        }
+        r = requests.get("http://api.mediastack.com/v1/news", params=params, headers=HDRS, timeout=20)
+        r.raise_for_status()
+        data = r.json()
+        for art in data.get("data", []):
+            url = art.get("url") or ""
+            if not url or url in seen_urls:
+                continue
+            seen_urls.add(url)
+            ts = art.get("published_at")
+            if ts:
+                try:
+                    ts = int(datetime.strptime(ts, "%Y-%m-%dT%H:%M:%S%z").timestamp())
+                except Exception:
+                    ts = int(datetime.now(timezone.utc).timestamp())
+            else:
+                ts = int(datetime.now(timezone.utc).timestamp())
+            out.append({
+                "published_ts": ts,
+                "source": urlparse(url).netloc.replace("www.", ""),
+                "title": (art.get("title", "") or "").strip(),
+                "url": url,
+                "summary": (art.get("description", "") or "")[:600],
+            })
+        if len(seen_urls) > 5000:
+            seen_urls.clear()
+        return out, None
+    except Exception as ex:
+        return out, str(ex)
+
+
 def main():
     prod  = kafka_producer_with_retry()
     feeds = read_feeds()
@@ -134,6 +183,9 @@ def main():
 
     last_hash = {u: set() for u in feeds}
     gdelt_seen = set()
+ 
+    mediastack_seen = set()
+
 
     while True:
         pushed_total = 0
@@ -155,6 +207,18 @@ def main():
                 for r in recs:
                     prod.send(TOPIC, r)
                 pushed_total += len(recs)
+
+        if USE_MEDIASTACK:
+            recs, err = 
+      
+      (mediastack_seen)
+            if err:
+                log(f"mediastack invalide: {err}")
+            else:
+                for r in recs:
+                    prod.send(TOPIC, r)
+                pushed_total += len(recs)
+
         if pushed_total:
             log(f"+{pushed_total} articles")
         time.sleep(POLL_SEC)
