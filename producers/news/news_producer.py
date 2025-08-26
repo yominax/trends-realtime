@@ -11,6 +11,9 @@ POLL_SEC    = int(os.getenv("POLL_SEC", "20"))
 MAX_WORKERS = int(os.getenv("MAX_WORKERS", "12"))
 FEEDS_ENV   = os.getenv("FEEDS", "")
 FEEDS_FILE  = os.getenv("FEEDS_FILE", "/app/feeds.txt")
+USE_GDELT   = os.getenv("USE_GDELT", "1") == "1"
+GDELT_MAX   = int(os.getenv("GDELT_MAX", "50"))
+GDELT_QUERY = os.getenv("GDELT_QUERY", "sourceLanguage:French")
 
 UA = "TrendsRealtimeBot/1.0 (+github.com/yominax/trends-realtime; contact: you@example.com)"
 HDRS = {
@@ -85,12 +88,52 @@ def pull_feed(url, seen_hashes):
     except Exception as ex:
         return src, out, str(ex)
 
+def pull_gdelt(seen_urls):
+    out = []
+    try:
+        params = {
+            "query": GDELT_QUERY,
+            "mode": "ArtList",
+            "format": "json",
+            "maxrecords": GDELT_MAX,
+            "sort": "DateDesc",
+        }
+        r = requests.get("https://api.gdeltproject.org/api/v2/doc/doc", params=params, headers=HDRS, timeout=20)
+        r.raise_for_status()
+        data = r.json()
+        for art in data.get("articles", []):
+            url = art.get("url") or ""
+            if not url or url in seen_urls:
+                continue
+            seen_urls.add(url)
+            ts = art.get("seendate")
+            if ts:
+                try:
+                    ts = int(datetime.strptime(ts, "%Y%m%d%H%M%S").replace(tzinfo=timezone.utc).timestamp())
+                except Exception:
+                    ts = int(datetime.now(timezone.utc).timestamp())
+            else:
+                ts = int(datetime.now(timezone.utc).timestamp())
+            out.append({
+                "published_ts": ts,
+                "source": urlparse(url).netloc.replace("www.", ""),
+                "title": (art.get("title", "") or "").strip(),
+                "url": url,
+                "summary": (art.get("excerpt", "") or "")[:600],
+            })
+        if len(seen_urls) > 5000:
+            seen_urls.clear()
+        return out, None
+    except Exception as ex:
+        return out, str(ex)
+
 def main():
     prod  = kafka_producer_with_retry()
     feeds = read_feeds()
     log(f"{len(feeds)} flux RSS chargés")
 
     last_hash = {u: set() for u in feeds}
+    gdelt_seen = set()
 
     while True:
         pushed_total = 0
@@ -101,6 +144,14 @@ def main():
                 if err:
                     log(f"{src} invalide: {err}")
                     continue
+                for r in recs:
+                    prod.send(TOPIC, r)
+                pushed_total += len(recs)
+        if USE_GDELT:
+            recs, err = pull_gdelt(gdelt_seen)
+            if err:
+                log(f"gdelt invalide: {err}")
+            else:
                 for r in recs:
                     prod.send(TOPIC, r)
                 pushed_total += len(recs)
