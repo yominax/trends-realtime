@@ -4,21 +4,9 @@ services:
     environment:
       ZOOKEEPER_CLIENT_PORT: 2181
       ZOOKEEPER_TICK_TIME: 2000
-    # pas de ports: (réseau interne)
 
-  kafka:
-    image: confluentinc/cp-kafka:7.5.0
-    depends_on: [zookeeper]
-    environment:
-      KAFKA_BROKER_ID: 1
-      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
-      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: INTERNAL:PLAINTEXT,EXTERNAL:PLAINTEXT
-      KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka:29092,EXTERNAL://localhost:9092
-      KAFKA_LISTENERS: INTERNAL://0.0.0.0:29092,EXTERNAL://0.0.0.0:9092
-      KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
-      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
-      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
-      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+  
+
 
   postgres:
     image: postgres:15
@@ -27,14 +15,18 @@ services:
       POSTGRES_PASSWORD: trends
       POSTGRES_DB: trends
     volumes:
+      - postgres_data:/var/lib/postgresql/data
       - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
-      - ./db/init.sql:/docker-entrypoint-initdb.d/00_init.sql:ro
       - ./db/migrate_02_news.sql:/docker-entrypoint-initdb.d/02_news.sql:ro
-
-    # pas de ports nécessaires pour l’UI dans le même réseau
+      - ./db/migrate_03_entities.sql:/docker-entrypoint-initdb.d/03_entities.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
 
   wiki-producer:
-    build:                     # <-- build est SOUS le service
+    build:
       context: ./producers/wiki
     depends_on: [kafka]
     environment:
@@ -70,6 +62,7 @@ services:
       DB_PASS: trends
       DB_PORT: "5432"
     restart: unless-stopped
+
   news-producer:
     build:
       context: ./producers/news
@@ -77,8 +70,11 @@ services:
     environment:
       KAFKA_BOOTSTRAP_SERVERS: kafka:29092
       TOPIC: news_fr
-      POLL_SEC: "30"
-      FEEDS: "https://www.lemonde.fr/rss/en_continu.xml,https://www.bfmtv.com/rss/flux-actualites-a-la-une/,https://www.france24.com/fr/rss,https://www.lefigaro.fr/rss/feeds/figaro_actualites.xml,https://www.leparisien.fr/actualites-a-la-une/rss.xml,https://www.lesechos.fr/rss/rss_une.xml"
+      POLL_SEC: "20"
+      MAX_WORKERS: "12"
+      FEEDS_FILE: /app/feeds.txt
+    volumes:
+      - ./producers/news/feeds.txt:/app/feeds.txt:ro
     restart: unless-stopped
   
   spike-aggregator:
@@ -95,19 +91,43 @@ services:
       WIKI_WINDOW_MIN: "10"
       ENTITIES_WINDOW_MIN: "60"
       HN_WINDOW_MIN: "10"
-      NEWS_WINDOW_MIN: "30"    # <-- ajou
+      NEWS_WINDOW_MIN: "30"
     restart: unless-stopped
+
+  kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    depends_on: [zookeeper]
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: INTERNAL:PLAINTEXT,EXTERNAL:PLAINTEXT
+      KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka:29092,EXTERNAL://localhost:9092
+      KAFKA_LISTENERS: INTERNAL://0.0.0.0:29092,EXTERNAL://0.0.0.0:9092
+      KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+    healthcheck:
+      test: ["CMD", "kafka-broker-api-versions", "--bootstrap-server=kafka:29092"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
 
   ui:
     build:
       context: ./app
-    depends_on: [postgres]
+    depends_on:
+      postgres:
+        condition: service_healthy
     environment:
       DB_HOST: postgres
       DB_NAME: trends
       DB_USER: trends
       DB_PASS: trends
       DB_PORT: "5432"
-      REFRESH_SEC: "10"
-    ports: ["8501:8501"]   # UI accessible http://localhost:8501
+      REFRESH_SEC: "5"            # plus réactif
+    ports: ["8501:8501"]
     restart: unless-stopped
+
+volumes:
+  postgres_data:
