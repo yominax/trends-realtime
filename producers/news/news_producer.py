@@ -9,9 +9,17 @@ BOOT        = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "kafka:29092")
 TOPIC       = os.getenv("TOPIC", "news_fr")
 POLL_SEC    = int(os.getenv("POLL_SEC", "20"))
 MAX_WORKERS = int(os.getenv("MAX_WORKERS", "12"))
+
+FEEDS_UNE   = os.getenv("FEEDS_UNE", "")
+FEEDS_UNE_FILE  = os.getenv("FEEDS_UNE_FILE", "/app/feeds.txt")
+FEEDS_CONT  = os.getenv("FEEDS_CONT", "")
+FEEDS_CONT_FILE = os.getenv("FEEDS_CONT_FILE", "/app/feeds_continu.txt")
+USE_GDELT   = os.getenv("USE_GDELT", "1") == "1"
+
 FEEDS_ENV   = os.getenv("FEEDS", "")
 FEEDS_FILE  = os.getenv("FEEDS_FILE", "/app/feeds.txt")
-USE_GDELT   = os.getenv("USE_GDELT", "1") == "1"
+
+
 
 GDELT_MAX   = int(os.getenv("GDELT_MAX", "250"))
 GDELT_QUERY = os.getenv("GDELT_QUERY", "sourceLanguage:French")
@@ -19,9 +27,6 @@ GDELT_QUERY = os.getenv("GDELT_QUERY", "sourceLanguage:French")
 MEDIASTACK_KEY   = os.getenv("MEDIASTACK_KEY", "")
 MEDIASTACK_LIMIT = int(os.getenv("MEDIASTACK_LIMIT", "50"))
 USE_MEDIASTACK   = bool(MEDIASTACK_KEY)
-
-GDELT_MAX   = int(os.getenv("GDELT_MAX", "50"))
-GDELT_QUERY = os.getenv("GDELT_QUERY", "sourceLanguage:French")
 
 
 UA = "TrendsRealtimeBot/1.0 (+github.com/yominax/trends-realtime; contact: you@example.com)"
@@ -32,18 +37,21 @@ HDRS = {
 
 def log(m): print(f"{datetime.now(timezone.utc).isoformat()} [news] {m}", flush=True)
 
-def read_feeds():
-    feeds=[]
-    if FEEDS_ENV.strip():
-        feeds += [u.strip() for u in FEEDS_ENV.split(",") if u.strip()]
+def read_feeds(env, path):
+    feeds = []
+    if env.strip():
+        feeds += [u.strip() for u in env.split(",") if u.strip()]
     try:
-        with open(FEEDS_FILE, "r", encoding="utf-8") as f:
+        with open(path, "r", encoding="utf-8") as f:
             feeds += [l.strip() for l in f if l.strip() and not l.startswith("#")]
     except FileNotFoundError:
         pass
-    out=[]; seen=set()
+    out = []
+    seen = set()
     for u in feeds:
-        if u not in seen: out.append(u); seen.add(u)
+        if u not in seen:
+            out.append(u)
+            seen.add(u)
     return out
 
 def kafka_producer_with_retry():
@@ -137,7 +145,9 @@ def pull_gdelt(seen_urls):
         return out, str(ex)
 
 
+
 def pull_mediatack(seen_urls):
+
     out = []
     try:
         params = {
@@ -175,28 +185,65 @@ def pull_mediatack(seen_urls):
     except Exception as ex:
         return out, str(ex)
 
-
 def main():
-    prod  = kafka_producer_with_retry()
-    feeds = read_feeds()
-    log(f"{len(feeds)} flux RSS chargés")
+    prod = kafka_producer_with_retry()
+    feeds_une = read_feeds(FEEDS_UNE, FEEDS_UNE_FILE)
+    feeds_cont = read_feeds(FEEDS_CONT, FEEDS_CONT_FILE)
+    log(f"{len(feeds_une)} flux 'une', {len(feeds_cont)} flux continu")
 
-    last_hash = {u: set() for u in feeds}
+
+    last_hash_une = {u: set() for u in feeds_une}
+    last_hash_cont = {u: set() for u in feeds_cont}
     gdelt_seen = set()
- 
     mediastack_seen = set()
+
+ 
+ 
+
 
 
     while True:
         pushed_total = 0
+        # Flux UNE
         with ThreadPoolExecutor(max_workers=MAX_WORKERS) as ex:
-            futures = {ex.submit(pull_feed, u, last_hash[u]): u for u in feeds}
+            futures = {ex.submit(pull_feed, u, last_hash_une[u]): u for u in feeds_une}
             for fut in as_completed(futures):
                 src, recs, err = fut.result()
                 if err:
                     log(f"{src} invalide: {err}")
                     continue
                 for r in recs:
+                    r["kind"] = "une"
+                    prod.send(TOPIC, r)
+                pushed_total += len(recs)
+        # Flux continu
+        with ThreadPoolExecutor(max_workers=MAX_WORKERS) as ex:
+            futures = {ex.submit(pull_feed, u, last_hash_cont[u]): u for u in feeds_cont}
+            for fut in as_completed(futures):
+                src, recs, err = fut.result()
+                if err:
+                    log(f"{src} invalide: {err}")
+                    continue
+                for r in recs:
+                    r["kind"] = "continu"
+                    prod.send(TOPIC, r)
+                pushed_total += len(recs)
+        if USE_GDELT:
+            recs, err = pull_gdelt(gdelt_seen)
+            if err:
+                log(f"gdelt invalide: {err}")
+            else:
+                for r in recs:
+                    r["kind"] = "une"
+                    prod.send(TOPIC, r)
+                pushed_total += len(recs)
+        if USE_MEDIASTACK:
+            recs, err = pull_mediastack(mediastack_seen)
+            if err:
+                log(f"mediastack invalide: {err}")
+            else:
+                for r in recs:
+                    r["kind"] = "une"
                     prod.send(TOPIC, r)
                 pushed_total += len(recs)
         if USE_GDELT:

@@ -72,9 +72,11 @@ services:
       TOPIC: news_fr
       POLL_SEC: "20"
       MAX_WORKERS: "12"
-      FEEDS_FILE: /app/feeds.txt
+      FEEDS_UNE_FILE: /app/feeds.txt
+      FEEDS_CONT_FILE: /app/feeds_continu.txt
     volumes:
       - ./producers/news/feeds.txt:/app/feeds.txt:ro
+      - ./producers/news/feeds_continu.txt:/app/feeds_continu.txt:ro
     restart: unless-stopped
   
   spike-aggregator:

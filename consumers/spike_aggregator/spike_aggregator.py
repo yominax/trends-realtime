@@ -22,12 +22,12 @@ def toks(s):
     ws = [w.lower().strip("’'") for w in TOKEN.findall(s or "")]
     return [w for w in ws if w and w not in STOP and len(w)>2]
 
-def top_phrases(cur, minutes):
+def top_phrases(cur, minutes, kind):
     cur.execute("""
       SELECT source, title
       FROM news_articles
-      WHERE published_ts >= NOW() - (%s || ' minutes')::interval
-    """,[minutes])
+      WHERE kind=%s AND published_ts >= NOW() - (%s || ' minutes')::interval
+    """,[kind, minutes])
     uni=Counter(); bi=Counter(); ent=Counter(); srcmap=defaultdict(set)
     for source, title in cur.fetchall():
         w = toks(title or "")
@@ -48,21 +48,21 @@ def top_phrases(cur, minutes):
         rows.append((phrase, int(sc), len(srcmap[phrase])))
     return rows
 
-def write_entities(cur, rows):
-    # Nettoyage fenêtre récente pour 'news'
-    cur.execute("DELETE FROM spikes_entities WHERE ts >= NOW()-interval '5 minutes' AND kind='news'")
+def write_entities(cur, rows, kind_tag):
+    # Nettoyage fenêtre récente pour ce type
+    cur.execute("DELETE FROM spikes_entities WHERE ts >= NOW()-interval '5 minutes' AND kind=%s", [kind_tag])
     for phrase, mentions, nb_src in rows:
         score = float(mentions + 0.7*nb_src)
         cur.execute("""
           INSERT INTO spikes_entities(ts, phrase, kind, mentions, sources, score)
-          VALUES(NOW(), %s, 'news', %s, %s, %s)
+          VALUES(NOW(), %s, %s, %s, %s, %s)
           ON CONFLICT (ts, phrase, kind) DO NOTHING
-        """, (phrase, mentions, nb_src, score))
+        """, (phrase, kind_tag, mentions, nb_src, score))
 
 def main():
     conn=connect(); cur=conn.cursor()
     while True:
-        # spikes_news (30 min) – rapide
+        # spikes_news (30 min) basé sur le flux continu
         cur.execute("""
           INSERT INTO spikes_news(ts, keyword, count_30m, score_norm)
           SELECT NOW(), k, c, c::float
@@ -70,7 +70,7 @@ def main():
             SELECT unnest(string_to_array(lower(regexp_replace(title,'[^A-Za-zÀ-ÖØ-öø-ÿ ]',' ','g')), ' ')) AS k,
                    COUNT(*) c
             FROM news_articles
-            WHERE published_ts >= NOW() - interval '30 minutes'
+            WHERE kind='continu' AND published_ts >= NOW() - interval '30 minutes'
             GROUP BY 1
             HAVING length(k)>2 AND k NOT IN %s
             ORDER BY c DESC
@@ -79,10 +79,11 @@ def main():
           ON CONFLICT DO NOTHING
         """, (tuple(STOP),))
 
-        # Entités pour 60 min et 24 h
-        for win in (60, 1440):
-            rows = top_phrases(cur, win)[:50]
-            write_entities(cur, rows)
+        # Entités pour 60 min (continu) et 24 h (une)
+        rows = top_phrases(cur, 60, 'continu')[:50]
+        write_entities(cur, rows, 'news_continu')
+        rows = top_phrases(cur, 1440, 'une')[:50]
+        write_entities(cur, rows, 'news_une')
 
         time.sleep(STEP)
 
