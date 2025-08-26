@@ -9,17 +9,25 @@ BOOT        = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "kafka:29092")
 TOPIC       = os.getenv("TOPIC", "news_fr")
 POLL_SEC    = int(os.getenv("POLL_SEC", "20"))
 MAX_WORKERS = int(os.getenv("MAX_WORKERS", "12"))
+
 FEEDS_UNE   = os.getenv("FEEDS_UNE", "")
 FEEDS_UNE_FILE  = os.getenv("FEEDS_UNE_FILE", "/app/feeds.txt")
 FEEDS_CONT  = os.getenv("FEEDS_CONT", "")
 FEEDS_CONT_FILE = os.getenv("FEEDS_CONT_FILE", "/app/feeds_continu.txt")
 USE_GDELT   = os.getenv("USE_GDELT", "1") == "1"
+
+FEEDS_ENV   = os.getenv("FEEDS", "")
+FEEDS_FILE  = os.getenv("FEEDS_FILE", "/app/feeds.txt")
+
+
+
 GDELT_MAX   = int(os.getenv("GDELT_MAX", "250"))
 GDELT_QUERY = os.getenv("GDELT_QUERY", "sourceLanguage:French")
 # Optional Mediastack API to boost article volume
 MEDIASTACK_KEY   = os.getenv("MEDIASTACK_KEY", "")
 MEDIASTACK_LIMIT = int(os.getenv("MEDIASTACK_LIMIT", "50"))
 USE_MEDIASTACK   = bool(MEDIASTACK_KEY)
+
 
 UA = "TrendsRealtimeBot/1.0 (+github.com/yominax/trends-realtime; contact: you@example.com)"
 HDRS = {
@@ -136,7 +144,10 @@ def pull_gdelt(seen_urls):
     except Exception as ex:
         return out, str(ex)
 
-def pull_mediastack(seen_urls):
+
+
+def pull_mediatack(seen_urls):
+
     out = []
     try:
         params = {
@@ -180,10 +191,16 @@ def main():
     feeds_cont = read_feeds(FEEDS_CONT, FEEDS_CONT_FILE)
     log(f"{len(feeds_une)} flux 'une', {len(feeds_cont)} flux continu")
 
+
     last_hash_une = {u: set() for u in feeds_une}
     last_hash_cont = {u: set() for u in feeds_cont}
     gdelt_seen = set()
     mediastack_seen = set()
+
+ 
+ 
+
+
 
     while True:
         pushed_total = 0
@@ -229,6 +246,26 @@ def main():
                     r["kind"] = "une"
                     prod.send(TOPIC, r)
                 pushed_total += len(recs)
+        if USE_GDELT:
+            recs, err = pull_gdelt(gdelt_seen)
+            if err:
+                log(f"gdelt invalide: {err}")
+            else:
+                for r in recs:
+                    prod.send(TOPIC, r)
+                pushed_total += len(recs)
+
+        if USE_MEDIASTACK:
+            recs, err = 
+      
+      (mediastack_seen)
+            if err:
+                log(f"mediastack invalide: {err}")
+            else:
+                for r in recs:
+                    prod.send(TOPIC, r)
+                pushed_total += len(recs)
+
         if pushed_total:
             log(f"+{pushed_total} articles")
         time.sleep(POLL_SEC)
