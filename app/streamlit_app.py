@@ -44,8 +44,6 @@ FR_STOP = STOPWORDS.union({
     "janvier","février","mars","avril","mai","juin","juillet","août","septembre","octobre","novembre","décembre"
 })
 TOKEN = re.compile(r"[A-Za-zÀ-ÖØ-öø-ÿ'-]+")
-import collections, re
-
 CAP_SEQ = re.compile(r"\b(?:[A-Z][\wÀ-ÖØ-öø-ÿ'-]{2,}(?:\s+[A-Z][\wÀ-ÖØ-öø-ÿ'-]{2,})+)\b")
 
 
@@ -68,8 +66,6 @@ def toks(s: str):
             continue
         out.append(norm)
     return out
-import collections, re
-CAP_SEQ = re.compile(r"\b(?:[A-Z][\wÀ-ÖØ-öø-ÿ'-]{2,}(?:\s+[A-Z][\wÀ-ÖØ-öø-ÿ'-]{2,})+)\b")
 
 def compute_trends_df(titles:list[str]):
     if not titles:
