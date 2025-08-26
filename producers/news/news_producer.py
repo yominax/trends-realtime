@@ -12,12 +12,17 @@ MAX_WORKERS = int(os.getenv("MAX_WORKERS", "12"))
 FEEDS_ENV   = os.getenv("FEEDS", "")
 FEEDS_FILE  = os.getenv("FEEDS_FILE", "/app/feeds.txt")
 USE_GDELT   = os.getenv("USE_GDELT", "1") == "1"
+
 GDELT_MAX   = int(os.getenv("GDELT_MAX", "250"))
 GDELT_QUERY = os.getenv("GDELT_QUERY", "sourceLanguage:French")
 # Optional Mediastack API to boost article volume
 MEDIASTACK_KEY   = os.getenv("MEDIASTACK_KEY", "")
 MEDIASTACK_LIMIT = int(os.getenv("MEDIASTACK_LIMIT", "50"))
 USE_MEDIASTACK   = bool(MEDIASTACK_KEY)
+
+GDELT_MAX   = int(os.getenv("GDELT_MAX", "50"))
+GDELT_QUERY = os.getenv("GDELT_QUERY", "sourceLanguage:French")
+
 
 UA = "TrendsRealtimeBot/1.0 (+github.com/yominax/trends-realtime; contact: you@example.com)"
 HDRS = {
@@ -131,7 +136,8 @@ def pull_gdelt(seen_urls):
     except Exception as ex:
         return out, str(ex)
 
-def pull_mediastack(seen_urls):
+
+def pull_mediatack(seen_urls):
     out = []
     try:
         params = {
@@ -169,6 +175,7 @@ def pull_mediastack(seen_urls):
     except Exception as ex:
         return out, str(ex)
 
+
 def main():
     prod  = kafka_producer_with_retry()
     feeds = read_feeds()
@@ -176,7 +183,9 @@ def main():
 
     last_hash = {u: set() for u in feeds}
     gdelt_seen = set()
+ 
     mediastack_seen = set()
+
 
     while True:
         pushed_total = 0
@@ -198,14 +207,18 @@ def main():
                 for r in recs:
                     prod.send(TOPIC, r)
                 pushed_total += len(recs)
+
         if USE_MEDIASTACK:
-            recs, err = pull_mediastack(mediastack_seen)
+            recs, err = 
+      
+      (mediastack_seen)
             if err:
                 log(f"mediastack invalide: {err}")
             else:
                 for r in recs:
                     prod.send(TOPIC, r)
                 pushed_total += len(recs)
+
         if pushed_total:
             log(f"+{pushed_total} articles")
         time.sleep(POLL_SEC)
