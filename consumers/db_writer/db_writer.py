@@ -63,8 +63,12 @@ def kafka_consumer(topics: Iterable[str]):
 def write_news(cur, rec: dict):
     cur.execute(
         """
+
         INSERT INTO news_articles(published_ts, source, title, url, summary, kind)
         VALUES (to_timestamp(%s), %s, %s, %s, %s, %s)
+
+
+
         """,
         (
             rec.get("published_ts"),
@@ -72,7 +76,11 @@ def write_news(cur, rec: dict):
             rec.get("title"),
             rec.get("url"),
             rec.get("summary"),
+
+
             rec.get("kind", "continu"),
+
+
         ),
     )
 
