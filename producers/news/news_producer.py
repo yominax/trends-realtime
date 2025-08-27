@@ -140,7 +140,7 @@ def pull_gdelt(seen_urls):
         return out, str(ex)
 
 
-def pull_mediatack(seen_urls):
+def pull_mediastack(seen_urls):
 
     out = []
     try:
@@ -235,23 +235,6 @@ def main():
             else:
                 for r in recs:
                     r["kind"] = "une"
-                    prod.send(TOPIC, r)
-                pushed_total += len(recs)
-        if USE_GDELT:
-            recs, err = pull_gdelt(gdelt_seen)
-            if err:
-                log(f"gdelt invalide: {err}")
-            else:
-                for r in recs:
-                    prod.send(TOPIC, r)
-                pushed_total += len(recs)
-
-        if USE_MEDIASTACK:
-            recs, err =  (mediastack_seen)
-            if err:
-                log(f"mediastack invalide: {err}")
-            else:
-                for r in recs:
                     prod.send(TOPIC, r)
                 pushed_total += len(recs)
 
